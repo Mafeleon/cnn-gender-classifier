@@ -896,10 +896,6 @@ div[data-testid="stDownloadButton"] > button {
     letter-spacing: 0;
 }
 
-.summary-table-title strong {
-    font-weight: 700;
-}
-
 .summary-table {
     width: 100%;
     min-width: 760px;
@@ -948,16 +944,11 @@ div[data-testid="stDownloadButton"] > button {
 }
 
 .summary-layer-name,
-.summary-layer-type,
 .summary-shape,
 .summary-param {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     color: #eefbff;
     font-size: 0.94rem;
-}
-
-.summary-layer-type {
-    color: #eefbff;
 }
 
 .summary-layer-cell {
@@ -970,10 +961,6 @@ div[data-testid="stDownloadButton"] > button {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.94rem;
     line-height: 1.35;
-}
-
-.summary-totals div + div {
-    margin-top: 0.08rem;
 }
 
 @keyframes heroDrift {
@@ -1342,8 +1329,7 @@ def render_model_summary_table(summary_text: str) -> None:
         f"""
         <tr>
             <td class="summary-layer-cell">
-                <span class="summary-layer-name">{html.escape(layer['capa'])}</span>
-                {"<br/><span class='summary-layer-type'>(" + html.escape(layer['tipo']) + ")</span>" if layer["tipo"] and layer["tipo"] != "--" else ""}
+                <span class="summary-layer-name">{html.escape(layer['capa'] + (f" ({layer['tipo']})" if layer['tipo'] and layer['tipo'] != '--' else ''))}</span>
             </td>
             <td class="summary-shape">{html.escape(layer['salida'])}</td>
             <td class="summary-param">{html.escape(layer['parametros'])}</td>
@@ -1358,8 +1344,8 @@ def render_model_summary_table(summary_text: str) -> None:
         ("Non-trainable params", "Non-trainable params"),
         ("Optimizer params", "Optimizer params"),
     ]
-    totals_html = "".join(
-        f"<div><strong>{label_es}:</strong> {html.escape(parsed['totals'].get(label_en, '--'))}</div>"
+    totals_html = "<br/>".join(
+        f"{label_es}: {html.escape(parsed['totals'].get(label_en, '--'))}"
         for label_en, label_es in total_lines
         if parsed["totals"].get(label_en)
     )
@@ -1367,7 +1353,7 @@ def render_model_summary_table(summary_text: str) -> None:
     st.markdown(
         f"""
         <div class="summary-table-wrap">
-            <div class="summary-table-title"><strong>Model:</strong> "{model_name}"</div>
+            <div class="summary-table-title">Model: "{model_name}"</div>
             <table class="summary-table">
                 <thead>
                     <tr>
