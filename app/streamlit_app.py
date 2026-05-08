@@ -12,7 +12,7 @@ import streamlit as st
 import tensorflow as tf
 from PIL import Image
 
-from src.dataset import prepare_image_from_pil
+from src.inference import prepare_image_from_pil
 from src.settings import CLASS_NAMES, DEFAULT_IMAGE_SIZE, FINAL_MODEL_PATH, RESULTS_JSON_PATH
 from src.xai import make_gradcam_heatmap, make_saliency_map, overlay_heatmap
 

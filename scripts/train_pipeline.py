@@ -18,8 +18,8 @@ from src.dataset import (
     inspect_dataset,
     load_or_create_array_cache,
     make_stratified_splits,
-    prepare_image_from_pil,
 )
+from src.inference import prepare_image_from_pil
 from src.modeling import (
     build_callbacks,
     build_cnn,
