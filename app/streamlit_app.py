@@ -4,7 +4,6 @@ import base64
 import io
 import json
 import re
-import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -37,7 +36,7 @@ FIGURE_PATHS = {
 }
 
 st.set_page_config(
-    page_title="Aether Research | CNN Gender Classifier + XAI",
+    page_title="Prisma XAI Lab | Clasificacion por sexo con CNN",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -888,14 +887,12 @@ def inject_css() -> None:
 
 
 def bootstrap_state() -> None:
-    if "session_code" not in st.session_state:
-        st.session_state.session_code = f"AX-{secrets.randbelow(900) + 100}"
     if "active_image_bytes" not in st.session_state:
         st.session_state.active_image_bytes = None
     if "active_image_name" not in st.session_state:
         st.session_state.active_image_name = None
-    if "active_source" not in st.session_state:
-        st.session_state.active_source = "idle"
+    if "uploader_nonce" not in st.session_state:
+        st.session_state.uploader_nonce = 0
 
 
 def to_data_url(image_source: Image.Image | np.ndarray | Path) -> str:
@@ -923,7 +920,11 @@ def format_pct(value: float | None) -> str:
 
 
 def label_display(label: str) -> str:
-    return label.upper().replace("_", " ")
+    return {"female": "FEMENINO", "male": "MASCULINO"}.get(label, label.upper().replace("_", " "))
+
+
+def experiment_display_name(name: str) -> str:
+    return {"regularized": "REGULARIZADO", "baseline": "BASE"}.get(name, name.upper())
 
 
 def extract_total_params(summary_text: str) -> str:
@@ -938,64 +939,40 @@ def describe_focus_zone(heatmap: np.ndarray) -> tuple[str, str]:
     weighted_x = float((x_coords * weights).sum() / weights.sum())
     rows, cols = heatmap.shape
 
-    vertical = "upper" if weighted_y < rows / 3 else "central" if weighted_y < 2 * rows / 3 else "lower"
-    horizontal = "left" if weighted_x < cols / 3 else "center" if weighted_x < 2 * cols / 3 else "right"
+    vertical = "superior" if weighted_y < rows / 3 else "central" if weighted_y < 2 * rows / 3 else "inferior"
+    horizontal = "izquierda" if weighted_x < cols / 3 else "centro" if weighted_x < 2 * cols / 3 else "derecha"
 
     highlighted_ratio = float((heatmap > (heatmap.mean() + heatmap.std())).mean())
-    spread = "compact" if highlighted_ratio < 0.18 else "distributed"
+    spread = "compacta" if highlighted_ratio < 0.18 else "distribuida"
     return f"{vertical}-{horizontal}", spread
 
 
 def saliency_summary(heatmap: np.ndarray) -> str:
     region, spread = describe_focus_zone(heatmap)
     return (
-        f"High-sensitivity pixels remain {spread} and cluster around the {region} facial zone, "
-        "which indicates where the sigmoid output reacts most strongly to local texture changes."
+        f"Los pixeles de mayor sensibilidad aparecen de forma {spread} y se concentran en la zona {region} del rostro, "
+        "lo que muestra donde la salida sigmoide cambia con mayor fuerza frente a variaciones locales de textura."
     )
 
 
 def gradcam_summary(heatmap: np.ndarray, confidence: float) -> str:
     region, spread = describe_focus_zone(heatmap)
-    verdict = "reinforces" if confidence >= 0.60 else "only partially supports"
+    verdict = "refuerza" if confidence >= 0.60 else "solo respalda de forma parcial"
     return (
-        f"Deeper activations stay {spread} over the {region} region, which {verdict} the current "
-        "classification by concentrating semantic evidence instead of background noise."
+        f"Las activaciones profundas permanecen {spread} sobre la region {region}, lo que {verdict} la "
+        "clasificacion actual al concentrar evidencia semantica y no ruido del fondo."
     )
-
-
-def load_demo_image() -> Image.Image:
-    composite = Image.open(FIGURE_PATHS["xai_example"]).convert("RGB")
-    width, height = composite.size
-    crop = composite.crop(
-        (
-            int(width * 0.012),
-            int(height * 0.11),
-            int(width * 0.295),
-            int(height * 0.975),
-        )
-    )
-    return crop
 
 
 def set_active_upload(uploaded_file) -> None:
     st.session_state.active_image_bytes = uploaded_file.getvalue()
     st.session_state.active_image_name = uploaded_file.name
-    st.session_state.active_source = "upload"
 
 
-def set_demo_source() -> None:
-    image = load_demo_image()
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    st.session_state.active_image_bytes = buffer.getvalue()
-    st.session_state.active_image_name = "aether_demo_stream.png"
-    st.session_state.active_source = "demo"
-
-
-def clear_active_source() -> None:
+def clear_active_image() -> None:
     st.session_state.active_image_bytes = None
     st.session_state.active_image_name = None
-    st.session_state.active_source = "idle"
+    st.session_state.uploader_nonce += 1
 
 
 def get_active_image() -> tuple[Image.Image | None, str | None]:
@@ -1037,23 +1014,23 @@ def build_export_payload(
     source_name: str,
 ) -> bytes:
     payload = {
-        "session_code": st.session_state.session_code,
-        "generated_at": datetime.now().isoformat(),
-        "source_name": source_name,
-        "source_mode": st.session_state.active_source,
-        "image_size": list(DEFAULT_IMAGE_SIZE),
-        "prediction": {
-            "predicted_label": analysis["predicted_label"],
-            "confidence": analysis["confidence"],
-            "prob_female": analysis["prob_female"],
-            "prob_male": analysis["prob_male"],
+        "fecha_generacion": datetime.now().isoformat(),
+        "archivo_origen": source_name,
+        "tamano_entrada": list(DEFAULT_IMAGE_SIZE),
+        "prediccion": {
+            "clase_predicha": analysis["predicted_label"],
+            "clase_predicha_mostrada": label_display(analysis["predicted_label"]),
+            "confianza": analysis["confidence"],
+            "probabilidad_femenino": analysis["prob_female"],
+            "probabilidad_masculino": analysis["prob_male"],
+            "clase_positiva_interna_modelo": "male",
         },
-        "xai_notes": {
-            "saliency": saliency_summary(analysis["saliency"]),
-            "gradcam": gradcam_summary(analysis["gradcam"], analysis["confidence"]),
+        "notas_xai": {
+            "saliency_map": saliency_summary(analysis["saliency"]),
+            "grad_cam": gradcam_summary(analysis["gradcam"], analysis["confidence"]),
         },
-        "model_performance_reference": metadata.get("test_metrics", {}),
-        "best_experiment": metadata.get("best_experiment", {}),
+        "referencia_modelo": metadata.get("test_metrics", {}),
+        "mejor_experimento": metadata.get("best_experiment", {}),
     }
     return json.dumps(payload, indent=2, ensure_ascii=True).encode("utf-8")
 
@@ -1080,14 +1057,13 @@ def render_navbar() -> None:
         """
         <div id="top" class="section-anchor"></div>
         <nav class="top-nav">
-            <a class="brand-lockup" href="#top">AETHER RESEARCH</a>
+            <a class="brand-lockup" href="#top">PRISMA XAI LAB</a>
             <div class="nav-links">
-                <a href="#models">Models</a>
-                <a href="#datasets">Datasets</a>
-                <a href="#workbench">Workbench</a>
-                <a href="#archives">Archives</a>
+                <a href="#modelo">Modelo</a>
+                <a href="#datos">Datos</a>
+                <a href="#analisis">Analisis</a>
+                <a href="#reportes">Reportes</a>
             </div>
-            <a class="nav-cta" href="#workbench">Initialize Session</a>
         </nav>
         """,
         unsafe_allow_html=True,
@@ -1098,40 +1074,41 @@ def render_hero(metadata: dict[str, Any]) -> None:
     accuracy = format_pct(metadata.get("test_metrics", {}).get("accuracy"))
     auc = metadata.get("test_metrics", {}).get("auc")
     auc_text = f"{auc:.3f}" if auc is not None else "--"
-    best_experiment = metadata.get("best_experiment", {}).get("name", "regularized").upper()
+    best_experiment = experiment_display_name(metadata.get("best_experiment", {}).get("name", "regularized"))
     subset_count = metadata.get("modeling_dataset_count", "--")
 
     st.markdown(
         f"""
         <section class="hero-shell">
             <div class="hero-content">
-                <div class="hero-badge">Explainable vision systems online</div>
-                <h1 class="hero-title">THE ARCHITECTURE OF <span>IDENTITY</span></h1>
+                <div class="hero-badge">Vision explicable en linea</div>
+                <h1 class="hero-title">ARQUITECTURA VISUAL <span>DEL SEXO</span></h1>
                 <p class="hero-copy">
-                    Deep neural analysis meets explainable AI for high-precision gender classification.
-                    This interface turns the laboratory CNN into a polished research workstation where
-                    every prediction is paired with visual evidence and methodological context.
+                    Una CNN entrenada desde cero se combina con explicabilidad visual para clasificar
+                    rostros en las clases <strong>femenino</strong> y <strong>masculino</strong> con evidencia
+                    interpretable. Esta interfaz convierte el laboratorio en una experiencia clara,
+                    elegante y lista para presentacion.
                 </p>
                 <div class="hero-actions">
-                    <a class="hero-button primary" href="#workbench">Initialize Analysis</a>
-                    <a class="hero-button secondary" href="#models">Review Model Dossier</a>
+                    <a class="hero-button primary" href="#analisis">Ir al analisis</a>
+                    <a class="hero-button secondary" href="#modelo">Ver modelo</a>
                 </div>
             </div>
             <div class="hero-meta">
                 <div class="hero-meta-card">
-                    <span>Test accuracy</span>
+                    <span>Exactitud de prueba</span>
                     <strong>{accuracy}</strong>
                 </div>
                 <div class="hero-meta-card">
-                    <span>Test AUC</span>
+                    <span>AUC de prueba</span>
                     <strong>{auc_text}</strong>
                 </div>
                 <div class="hero-meta-card">
-                    <span>Best experiment</span>
+                    <span>Mejor experimento</span>
                     <strong>{best_experiment}</strong>
                 </div>
                 <div class="hero-meta-card">
-                    <span>Model subset</span>
+                    <span>Submuestra de modelado</span>
                     <strong>{subset_count}</strong>
                 </div>
             </div>
@@ -1184,21 +1161,21 @@ def render_media_card(
 
 
 def render_models_section(metadata: dict[str, Any], total_params: str, summary_text: str) -> None:
-    st.markdown('<div id="models" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.markdown('<div id="modelo" class="section-anchor"></div>', unsafe_allow_html=True)
     render_section_header(
-        "Model dossier",
-        "Experimental CNN architecture and training evidence",
-        "The classifier was trained from scratch in TensorFlow-Keras, compared across two configurations, and retained the regularized variant as the best-performing configuration for the final deployment artifact.",
+        "Ficha del modelo",
+        "Arquitectura experimental y evidencia de entrenamiento",
+        "El clasificador se entreno desde cero en TensorFlow-Keras, se comparo en dos configuraciones y la variante regularizada fue seleccionada como artefacto final para el despliegue.",
     )
 
     best_experiment = metadata.get("best_experiment", {})
     test_metrics = metadata.get("test_metrics", {})
     render_metric_row(
         [
-            ("Input tensor", f"{DEFAULT_IMAGE_SIZE[0]}x{DEFAULT_IMAGE_SIZE[1]}", "RGB tensor with resize_with_pad and float normalization."),
-            ("Total params", total_params, "Compact architecture designed to remain deployable in Streamlit Cloud."),
-            ("Best learning rate", str(best_experiment.get("learning_rate", "--")), "Selected from the winning regularized experiment."),
-            ("Test loss", f"{test_metrics.get('loss', 0):.4f}" if test_metrics.get("loss") is not None else "--", "Final evaluation loss on the held-out test split."),
+            ("Tensor de entrada", f"{DEFAULT_IMAGE_SIZE[0]}x{DEFAULT_IMAGE_SIZE[1]}", "Imagen RGB con resize_with_pad y normalizacion en coma flotante."),
+            ("Parametros totales", total_params, "Arquitectura compacta pensada para mantenerse desplegable en Streamlit Cloud."),
+            ("Mejor tasa de aprendizaje", str(best_experiment.get("learning_rate", "--")), "Valor elegido en el experimento regularizado ganador."),
+            ("Perdida de prueba", f"{test_metrics.get('loss', 0):.4f}" if test_metrics.get("loss") is not None else "--", "Perdida final sobre el conjunto de prueba reservado."),
         ]
     )
 
@@ -1206,40 +1183,40 @@ def render_models_section(metadata: dict[str, Any], total_params: str, summary_t
     with col_left:
         if FIGURE_PATHS["hyperparameter_comparison"].exists():
             render_media_card(
-                "Hyperparameter comparison",
-                "Validation accuracy and loss traces for the baseline and regularized configurations.",
+                "Comparacion de hiperparametros",
+                "Curvas de exactitud y perdida de validacion para la configuracion base y la regularizada.",
                 FIGURE_PATHS["hyperparameter_comparison"],
                 note=(
-                    f"<strong>Decision:</strong> The <strong>{best_experiment.get('name', 'regularized')}</strong> setup "
-                    f"won with a best validation accuracy of {format_pct(best_experiment.get('best_val_accuracy'))}."
+                    f"<strong>Conclusion:</strong> La configuracion <strong>{experiment_display_name(best_experiment.get('name', 'regularized'))}</strong> "
+                    f"fue la ganadora con una mejor exactitud de validacion de {format_pct(best_experiment.get('best_val_accuracy'))}."
                 ),
-                eyebrow="Experiment scan",
+                eyebrow="Exploracion experimental",
             )
     with col_right:
         if FIGURE_PATHS["training_final"].exists():
             render_media_card(
-                "Final training trajectory",
-                "Learning curves from the experiment selected for deployment.",
+                "Trayectoria final de entrenamiento",
+                "Curvas de aprendizaje del experimento seleccionado para despliegue.",
                 FIGURE_PATHS["training_final"],
                 note=(
-                    f"<strong>Checkpoint:</strong> Best epoch {best_experiment.get('best_epoch', '--')} with "
-                    f"validation loss {best_experiment.get('best_val_loss', 0):.4f}."
+                    f"<strong>Punto de control:</strong> mejor epoca {best_experiment.get('best_epoch', '--')} con "
+                    f"perdida de validacion de {best_experiment.get('best_val_loss', 0):.4f}."
                     if best_experiment.get("best_val_loss") is not None
                     else ""
                 ),
-                eyebrow="Training curve",
+                eyebrow="Curva de entrenamiento",
             )
 
-    with st.expander("Model architecture digest"):
-        st.code(summary_text or "Model summary not available.", language="text")
+    with st.expander("Resumen textual de la arquitectura"):
+        st.code(summary_text or "No hay un resumen disponible del modelo.", language="text")
 
 
 def render_datasets_section(metadata: dict[str, Any]) -> None:
-    st.markdown('<div id="datasets" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.markdown('<div id="datos" class="section-anchor"></div>', unsafe_allow_html=True)
     render_section_header(
-        "Dataset intelligence",
-        "Coverage, stratification and sampling logic",
-        "The exploration stage scanned the full male/female face dataset, while the modeling stage used a balanced stratified subset to keep CNN training efficient and reproducible for deployment.",
+        "Inteligencia de datos",
+        "Cobertura, estratificacion y logica de muestreo",
+        "La etapa exploratoria reviso el conjunto completo de rostros femenino/masculino, mientras que el modelado utilizo una submuestra balanceada y estratificada para mantener el entrenamiento eficiente y reproducible.",
     )
 
     dataset_summary = metadata.get("dataset_summary", {})
@@ -1250,10 +1227,10 @@ def render_datasets_section(metadata: dict[str, Any]) -> None:
 
     render_metric_row(
         [
-            ("Female images", f"{female_count}", "Exploration count observed in the original dataset scan."),
-            ("Male images", f"{male_count}", "Exploration count observed in the original dataset scan."),
-            ("Modeling subset", f"{metadata.get('modeling_dataset_count', '--')}", "Balanced subset used for the train/validation/test workflow."),
-            ("Splits T/V/T", split_text, "Counts for train, validation and test partitions."),
+            ("Imagenes femeninas", f"{female_count}", "Conteo observado durante la inspeccion del conjunto original."),
+            ("Imagenes masculinas", f"{male_count}", "Conteo observado durante la inspeccion del conjunto original."),
+            ("Submuestra de modelado", f"{metadata.get('modeling_dataset_count', '--')}", "Submuestra balanceada usada para entrenamiento, validacion y prueba."),
+            ("Particiones T/V/P", split_text, "Cantidad de ejemplos en entrenamiento, validacion y prueba."),
         ]
     )
 
@@ -1261,20 +1238,20 @@ def render_datasets_section(metadata: dict[str, Any]) -> None:
     with col_left:
         if FIGURE_PATHS["dataset_mosaic"].exists():
             render_media_card(
-                "Dataset mosaic",
-                "Qualitative preview of the dataset variability observed during the exploration stage.",
+                "Mosaico del conjunto",
+                "Vista cualitativa de la variabilidad observada durante la etapa exploratoria.",
                 FIGURE_PATHS["dataset_mosaic"],
-                note="The mosaic helps inspect pose, lighting and texture diversity before any model fitting begins.",
-                eyebrow="Qualitative scan",
+                note="El mosaico ayuda a revisar poses, iluminacion y textura antes de iniciar el ajuste del modelo.",
+                eyebrow="Lectura cualitativa",
             )
     with col_right:
         if FIGURE_PATHS["class_distribution"].exists():
             render_media_card(
-                "Class distribution",
-                "Observed label counts across the original dataset before subsampling.",
+                "Distribucion de clases",
+                "Conteos observados por etiqueta antes de construir la submuestra.",
                 FIGURE_PATHS["class_distribution"],
-                note="The modeling subset was forced to remain balanced even though the source dataset is only approximately balanced.",
-                eyebrow="Balance audit",
+                note="La submuestra de modelado se obligo a permanecer balanceada aunque el conjunto fuente solo este aproximadamente balanceado.",
+                eyebrow="Auditoria de balance",
             )
 
 
@@ -1284,17 +1261,17 @@ def render_empty_workbench() -> None:
         <div class="glass-card empty-workbench">
             <div class="empty-center">
                 <div class="empty-icon">⌘</div>
-                <h3 class="empty-title">Drop Entity Data Here</h3>
+                <h3 class="empty-title">Sube La Imagen Para Analizar</h3>
                 <p class="empty-copy">
-                    Upload raw facial imagery or activate the internal demo stream. The inference engine
-                    is configured for JPG, JPEG and PNG archives and will convert every input into the
-                    exact 96x96 RGB tensor consumed by the deployed CNN.
+                    La aplicacion recibe imagenes faciales en formato JPG, JPEG o PNG, las convierte
+                    al tensor 96x96 RGB del modelo y ejecuta automaticamente la prediccion junto con
+                    Saliency Map y Grad-CAM.
                 </p>
             </div>
             <div class="meta-strip">
-                <span>Encryption: AES-256 active</span>
-                <span>Latency target: &lt;120 ms</span>
-                <span>Model: CNN + XAI v1.0</span>
+                <span>Preprocesamiento: RGB + padding</span>
+                <span>Visualizacion: Saliency + Grad-CAM</span>
+                <span>Modelo: CNN + XAI v1.0</span>
             </div>
         </div>
         """,
@@ -1302,14 +1279,15 @@ def render_empty_workbench() -> None:
     )
 
 
-def render_session_header() -> None:
+def render_analysis_header(source_name: str) -> None:
     st.markdown(
         f"""
         <div class="session-shell">
-            <div class="session-badge">Analysis workspace active</div>
-            <h3 class="session-title">Session {st.session_state.session_code}</h3>
+            <div class="session-badge">Analisis activo</div>
+            <h3 class="session-title">Resultado de la inferencia</h3>
             <p class="session-copy">
-                Evaluating neural pathway activation for high-resolution demographic classification protocols.
+                Se esta evaluando la activacion de la red sobre la imagen <strong>{source_name}</strong>
+                para producir una decision de clasificacion por sexo y su evidencia visual asociada.
             </p>
         </div>
         """,
@@ -1323,15 +1301,15 @@ def render_input_tensor_card(original_rgb: np.ndarray, resized_rgb: np.ndarray, 
         <div class="glass-card">
             <div class="tensor-header">
                 <div>
-                    <h3 class="panel-title">Input Tensor Analysis</h3>
-                    <p class="panel-subtitle">Source archive: {source_name}</p>
+                    <h3 class="panel-title">Analisis del tensor de entrada</h3>
+                    <p class="panel-subtitle">Archivo fuente: {source_name}</p>
                 </div>
-                <div class="panel-tag">Phase I</div>
+                <div class="panel-tag">Fase I</div>
             </div>
             <div class="tensor-grid">
                 <div class="tensor-shot">
                     <img src="{to_data_url(original_rgb)}" alt="Original input" />
-                    <span>Raw archive</span>
+                    <span>Imagen original</span>
                 </div>
                 <div class="tensor-shot">
                     <img src="{to_data_url(resized_rgb)}" alt="Preprocessed tensor" />
@@ -1352,7 +1330,11 @@ def render_prediction_card(analysis: dict[str, Any], source_name: str) -> None:
     confidence = analysis["confidence"]
     margin = abs(prob_male - prob_female)
     confidence_note = (
-        "High-confidence classification" if confidence >= 0.75 else "Moderate-confidence classification" if confidence >= 0.60 else "Low-margin classification"
+        "Clasificacion de alta confianza"
+        if confidence >= 0.75
+        else "Clasificacion de confianza media"
+        if confidence >= 0.60
+        else "Clasificacion con margen estrecho"
     )
     predicted_probability = prob_male if predicted == "male" else prob_female
     alternative_probability = prob_female if predicted == "male" else prob_male
@@ -1362,22 +1344,22 @@ def render_prediction_card(analysis: dict[str, Any], source_name: str) -> None:
         <div class="glass-card">
             <div class="result-header">
                 <div>
-                    <div class="card-eyebrow">Classification result</div>
+                    <div class="card-eyebrow">Resultado de clasificacion</div>
                     <div class="result-value">{label_display(predicted)}</div>
-                    <p class="panel-subtitle">{confidence_note} sourced from <strong>{source_name}</strong>.</p>
+                    <p class="panel-subtitle">{confidence_note} obtenido a partir de <strong>{source_name}</strong>.</p>
                 </div>
-                <div class="panel-tag">Live inference</div>
+                <div class="panel-tag">Inferencia en vivo</div>
             </div>
             <div class="signal-stack">
                 <div class="signal-row">
-                    <span>Confidence</span>
+                    <span>Confianza</span>
                     <span>{predicted_probability:.1%}</span>
                 </div>
                 <div class="signal-track">
                     <div class="signal-fill" style="width: {predicted_probability * 100:.2f}%"></div>
                 </div>
                 <div class="signal-row">
-                    <span>Alternative ({alternative})</span>
+                    <span>Alternativa ({label_display(alternative)})</span>
                     <span>{alternative_probability:.1%}</span>
                 </div>
                 <div class="signal-track">
@@ -1385,13 +1367,13 @@ def render_prediction_card(analysis: dict[str, Any], source_name: str) -> None:
                 </div>
             </div>
             <div class="result-summary">
-                The sigmoid output is calibrated on the <strong>male</strong> class. The decision margin for this
-                session is <strong>{margin:.1%}</strong>, so the complementary probability assigned to
-                <strong>female</strong> remains visible for interpretation.
+                La salida sigmoide del modelo esta calibrada sobre la clase interna <strong>male</strong>.
+                El margen de decision en este caso es de <strong>{margin:.1%}</strong>, por eso la probabilidad
+                complementaria de la otra clase tambien se muestra para la interpretacion.
             </div>
             <div class="tiny-ledger">
-                <strong>Female:</strong> {prob_female:.2%}<br/>
-                <strong>Male:</strong> {prob_male:.2%}
+                <strong>Femenino:</strong> {prob_female:.2%}<br/>
+                <strong>Masculino:</strong> {prob_male:.2%}
             </div>
         </div>
         """,
@@ -1408,24 +1390,24 @@ def render_methodology_card(metadata: dict[str, Any], analysis: dict[str, Any]) 
         f"""
         <div class="glass-card methodology-card">
             <div class="media-card-header">
-                <div class="card-eyebrow">Technical notes & methodology</div>
-                <h3 class="media-card-title">How this inference was produced</h3>
+                <div class="card-eyebrow">Notas tecnicas y metodologia</div>
+                <h3 class="media-card-title">Como se produjo esta inferencia</h3>
                 <p class="media-card-subtitle">
-                    Every step below is aligned with the training pipeline used in the notebook and the final lab submission.
+                    Cada paso de abajo esta alineado con el pipeline de entrenamiento usado en el notebook y en la entrega final del laboratorio.
                 </p>
             </div>
             <div class="methodology-grid">
                 <div class="methodology-unit">
-                    <span>Preprocess</span>
-                    <p>RGB conversion, float32 normalization and <code>resize_with_pad</code> to {DEFAULT_IMAGE_SIZE[0]}x{DEFAULT_IMAGE_SIZE[1]} before entering the CNN.</p>
+                    <span>Preprocesamiento</span>
+                    <p>Conversion a RGB, normalizacion a float32 y <code>resize_with_pad</code> a {DEFAULT_IMAGE_SIZE[0]}x{DEFAULT_IMAGE_SIZE[1]} antes de entrar a la CNN.</p>
                 </div>
                 <div class="methodology-unit">
-                    <span>Model</span>
-                    <p>Best experiment: <strong>{best.get('name', 'regularized')}</strong> with dropout {best.get('dropout_rate', '--')} and learning rate {best.get('learning_rate', '--')}.</p>
+                    <span>Modelo</span>
+                    <p>Mejor experimento: <strong>{experiment_display_name(best.get('name', 'regularized'))}</strong> con dropout {best.get('dropout_rate', '--')} y tasa de aprendizaje {best.get('learning_rate', '--')}.</p>
                 </div>
                 <div class="methodology-unit">
-                    <span>Reference</span>
-                    <p>Held-out test accuracy {format_pct(test_metrics.get('accuracy'))} and AUC {auc_text} for the deployed checkpoint.</p>
+                    <span>Referencia</span>
+                    <p>Exactitud de prueba de {format_pct(test_metrics.get('accuracy'))} y AUC de {auc_text} para el modelo desplegado.</p>
                 </div>
             </div>
         </div>
@@ -1435,67 +1417,48 @@ def render_methodology_card(metadata: dict[str, Any], analysis: dict[str, Any]) 
 
 
 def render_workbench_section(metadata: dict[str, Any]) -> None:
-    st.markdown('<div id="workbench" class="section-anchor"></div>', unsafe_allow_html=True)
-    workbench_status = "System idle" if st.session_state.active_source == "idle" else "Session armed"
+    st.markdown('<div id="analisis" class="section-anchor"></div>', unsafe_allow_html=True)
+    workbench_status = "Esperando imagen" if st.session_state.active_image_bytes is None else "Analisis cargado"
     render_section_header(
-        "Interactive workstation",
-        "Analysis Workbench",
-        "The workbench transitions from a cinematic landing state into a live inference surface once an archive or demo stream is loaded. All actions below are wired to the deployed model and XAI pipeline.",
+        "Laboratorio interactivo",
+        "Area de analisis",
+        "Aqui ocurre el flujo central de la aplicacion: subir una imagen, preprocesarla, clasificarla y visualizar la evidencia de Saliency Map y Grad-CAM sobre la misma entrada analizada.",
         status=workbench_status,
     )
 
+    uploader_key = f"main_uploader_{st.session_state.uploader_nonce}"
+    uploaded_file = st.file_uploader(
+        "Selecciona o arrastra una imagen facial",
+        type=["jpg", "jpeg", "png"],
+        key=uploader_key,
+    )
+    st.caption("El analisis comienza automaticamente cuando la imagen se carga.")
+
+    if uploaded_file is not None:
+        set_active_upload(uploaded_file)
+
     if st.session_state.active_image_bytes is None:
         render_empty_workbench()
-        control_a, control_b = st.columns([1.1, 1.1], gap="large")
-        with control_a:
-            with st.popover("Browse Archive", use_container_width=True):
-                uploaded_file = st.file_uploader(
-                    "Sube una imagen facial",
-                    type=["jpg", "jpeg", "png"],
-                    key="archive_uploader",
-                )
-                st.caption("También puedes arrastrar la imagen directamente dentro del área de carga.")
-                if uploaded_file is not None:
-                    set_active_upload(uploaded_file)
-                    st.rerun()
-        with control_b:
-            if st.button("Connect Stream", use_container_width=True):
-                set_demo_source()
-                st.rerun()
-
-        st.markdown(
-            '<p class="control-caption">Browse Archive abre una carga real de archivos. Connect Stream inyecta una muestra interna derivada del artefacto XAI del laboratorio para que la demo siga funcionando incluso en Streamlit Cloud.</p>',
-            unsafe_allow_html=True,
-        )
         return
 
-    render_session_header()
-    source_cols = st.columns([1.2, 1.2, 0.9], gap="medium")
+    render_analysis_header(st.session_state.active_image_name or "imagen cargada")
+    source_cols = st.columns([1.45, 0.55], gap="medium")
     with source_cols[0]:
-        with st.popover("Load New Archive", use_container_width=True):
-            uploaded_file = st.file_uploader(
-                "Reemplaza la imagen actual",
-                type=["jpg", "jpeg", "png"],
-                key="replacement_uploader",
-            )
-            if uploaded_file is not None:
-                set_active_upload(uploaded_file)
-                st.rerun()
+        st.markdown(
+            '<p class="control-caption">Si subes otra imagen en el cargador de arriba, el analisis actual se reemplaza automaticamente por el nuevo.</p>',
+            unsafe_allow_html=True,
+        )
     with source_cols[1]:
-        if st.button("Replay Demo Stream", use_container_width=True):
-            set_demo_source()
-            st.rerun()
-    with source_cols[2]:
-        if st.button("Reset Session", use_container_width=True):
-            clear_active_source()
+        if st.button("Limpiar analisis", use_container_width=True):
+            clear_active_image()
             st.rerun()
 
     active_image, source_name = get_active_image()
     if active_image is None or source_name is None:
-        st.error("No fue posible recuperar la imagen activa de la sesión.")
+        st.error("No fue posible recuperar la imagen activa de la sesion.")
         return
 
-    with st.spinner("Executing live inference and generating attribution maps..."):
+    with st.spinner("Ejecutando la inferencia y generando los mapas de atribucion..."):
         analysis = analyze_image(active_image)
 
     top_left, top_right = st.columns([1.35, 1.0], gap="large")
@@ -1504,9 +1467,9 @@ def render_workbench_section(metadata: dict[str, Any]) -> None:
     with top_right:
         render_prediction_card(analysis, source_name)
         st.download_button(
-            "Export Metadata",
+            "Descargar reporte JSON",
             data=build_export_payload(metadata, analysis, source_name),
-            file_name=f"{st.session_state.session_code.lower()}_metadata.json",
+            file_name="reporte_analisis_xai.json",
             mime="application/json",
             use_container_width=True,
         )
@@ -1515,56 +1478,56 @@ def render_workbench_section(metadata: dict[str, Any]) -> None:
     with bottom_left:
         render_media_card(
             "Saliency Map",
-            "Pixel-level attribution gradient over the exact tensor processed by the CNN.",
+            "Gradiente de atribucion a nivel de pixel sobre el tensor exacto que consumio la CNN.",
             analysis["saliency_overlay"],
-            note=f"<strong>Insight:</strong> {saliency_summary(analysis['saliency'])}",
-            eyebrow="Attribution field",
+            note=f"<strong>Lectura:</strong> {saliency_summary(analysis['saliency'])}",
+            eyebrow="Campo de atribucion",
         )
     with bottom_right:
         render_media_card(
             "Grad-CAM",
-            "Class activation mapping based on the final convolutional representations.",
+            "Mapa de activacion por clase construido desde las representaciones convolucionales profundas.",
             analysis["gradcam_overlay"],
-            note=f"<strong>Metadata:</strong> {gradcam_summary(analysis['gradcam'], analysis['confidence'])}",
-            eyebrow="Activation trace",
+            note=f"<strong>Lectura:</strong> {gradcam_summary(analysis['gradcam'], analysis['confidence'])}",
+            eyebrow="Traza de activacion",
         )
 
     render_methodology_card(metadata, analysis)
 
 
 def render_archives_section() -> None:
-    st.markdown('<div id="archives" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.markdown('<div id="reportes" class="section-anchor"></div>', unsafe_allow_html=True)
     render_section_header(
-        "Artifacts & reporting",
-        "Deployment archives and visual evidence",
-        "This section exposes the figures, notebook and metric files that support the final submission. It doubles as the destination for the top navigation archive tab and the footer documentation links.",
+        "Artefactos y reporte",
+        "Archivos del despliegue y evidencia visual",
+        "Esta seccion expone figuras, notebook y metricas que respaldan la entrega final del laboratorio y sirven como soporte tecnico del despliegue.",
     )
 
     col_left, col_right = st.columns(2, gap="large")
     with col_left:
         if FIGURE_PATHS["confusion_matrix"].exists():
             render_media_card(
-                "Confusion matrix",
-                "Held-out test performance by predicted and true labels.",
+                "Matriz de confusion",
+                "Desempeno sobre el conjunto de prueba por etiquetas reales y predichas.",
                 FIGURE_PATHS["confusion_matrix"],
-                note="Useful for checking whether the classifier tends to favor one class over the other.",
-                eyebrow="Evaluation artifact",
+                note="Sirve para revisar si el clasificador tiende a favorecer una clase por encima de la otra.",
+                eyebrow="Artefacto de evaluacion",
             )
     with col_right:
         if FIGURE_PATHS["xai_example"].exists():
             render_media_card(
-                "Reference XAI example",
-                "Composite figure generated during the lab pipeline for a correctly classified image.",
+                "Ejemplo de XAI de referencia",
+                "Figura compuesta generada durante el pipeline del laboratorio para una imagen correctamente clasificada.",
                 FIGURE_PATHS["xai_example"],
-                note="This same artifact is also used to derive the internal demo stream embedded in the deployed interface.",
-                eyebrow="Interpretability artifact",
+                note="Este artefacto muestra como luce una salida completa del pipeline de interpretabilidad fuera de la interfaz interactiva.",
+                eyebrow="Artefacto de interpretabilidad",
             )
 
     download_cols = st.columns(3, gap="medium")
     with download_cols[0]:
         if RESULTS_JSON_PATH.exists():
             st.download_button(
-                "Download Results JSON",
+                "Descargar resultados JSON",
                 data=RESULTS_JSON_PATH.read_bytes(),
                 file_name="lab_results.json",
                 mime="application/json",
@@ -1573,7 +1536,7 @@ def render_archives_section() -> None:
     with download_cols[1]:
         if NOTEBOOK_PATH.exists():
             st.download_button(
-                "Download Notebook",
+                "Descargar notebook",
                 data=NOTEBOOK_PATH.read_bytes(),
                 file_name="cnn_gender_lab.ipynb",
                 mime="application/json",
@@ -1582,7 +1545,7 @@ def render_archives_section() -> None:
     with download_cols[2]:
         if MODEL_SUMMARY_PATH.exists():
             st.download_button(
-                "Download Model Summary",
+                "Descargar resumen del modelo",
                 data=MODEL_SUMMARY_PATH.read_text(encoding="utf-8"),
                 file_name="model_summary.txt",
                 mime="text/plain",
@@ -1592,31 +1555,31 @@ def render_archives_section() -> None:
 
 def render_protocol_section() -> None:
     render_section_header(
-        "Documentation deck",
-        "Ethics, safety, legal scope and privacy handling",
-        "These cards provide the short-form protocol layer behind the interface so the footer links lead somewhere concrete and presentation-ready instead of acting like empty placeholders.",
+        "Documentacion de soporte",
+        "Etica, seguridad, alcance legal y privacidad",
+        "Estas tarjetas le dan contenido real a la capa documental de la interfaz para que el footer apunte a secciones concretas y utiles.",
     )
 
     cards = [
         (
-            "ethics",
-            "Ethics Protocol",
-            "This classifier is an academic demonstration of supervised CNN classification and explainability. Its predictions should never be interpreted as identity, value or worth, and the demographic framing remains limited by the original dataset.",
+            "etica",
+            "Protocolo etico",
+            "Este clasificador es una demostracion academica de CNN supervisada con explicabilidad. Sus predicciones no deben interpretarse como identidad, valor o verdad absoluta, y el alcance demografico esta limitado por el conjunto original.",
         ),
         (
-            "safety",
-            "Safety Documentation",
-            "The interface is intended for controlled experimentation. Every prediction should be read together with Saliency Map and Grad-CAM outputs to detect weak evidence, background bias or unstable activations before drawing conclusions.",
+            "seguridad",
+            "Documentacion de seguridad",
+            "La interfaz esta pensada para experimentacion controlada. Cada prediccion debe leerse junto con Saliency Map y Grad-CAM para detectar evidencia debil, sesgo de fondo o activaciones inestables antes de sacar conclusiones.",
         ),
         (
             "legal",
-            "Legal",
-            "The repository contains the trained model, notebook and generated artifacts, but not the full source dataset. Dataset use, redistribution and attribution remain subject to the original provider terms referenced in the project documentation.",
+            "Aspectos legales",
+            "El repositorio contiene el modelo entrenado, el notebook y los artefactos generados, pero no el conjunto fuente completo. El uso, redistribucion y atribucion del conjunto siguen sujetos a los terminos del proveedor original.",
         ),
         (
-            "privacy",
-            "Privacy",
-            "Uploaded images are processed in-session for inference and visualization. The deployment is not designed as a storage system, and the repo only persists model artifacts and generated reports, not user-submitted images.",
+            "privacidad",
+            "Privacidad",
+            "Las imagenes cargadas se procesan dentro de la sesion de la app para inferencia y visualizacion. El despliegue no esta pensado como sistema de almacenamiento, y el repositorio solo conserva artefactos del modelo y reportes generados.",
         ),
     ]
 
@@ -1629,7 +1592,7 @@ def render_protocol_section() -> None:
                 f"""
                 <div class="glass-card">
                     <div class="media-card-header">
-                        <div class="card-eyebrow">Protocol note</div>
+                        <div class="card-eyebrow">Nota documental</div>
                         <h3 class="media-card-title">{title}</h3>
                     </div>
                     <div class="card-note">{body}</div>
@@ -1643,14 +1606,14 @@ def render_footer() -> None:
     st.markdown(
         """
         <section class="footer-shell">
-            <div class="footer-brand">AETHER RESEARCH</div>
+            <div class="footer-brand">PRISMA XAI LAB</div>
             <div class="footer-links">
-                <a href="#ethics">Ethics Protocol</a>
-                <a href="#safety">Safety Documentation</a>
+                <a href="#etica">Etica</a>
+                <a href="#seguridad">Seguridad</a>
                 <a href="#legal">Legal</a>
-                <a href="#privacy">Privacy</a>
+                <a href="#privacidad">Privacidad</a>
             </div>
-            <div class="footer-copy">2026 Aether Research Interface · CNN + XAI deployment</div>
+            <div class="footer-copy">2026 Prisma XAI Lab · despliegue CNN + XAI</div>
         </section>
         """,
         unsafe_allow_html=True,
