@@ -880,105 +880,100 @@ div[data-testid="stDownloadButton"] > button {
 
 .summary-table-wrap {
     margin-top: 0.6rem;
-    padding: 1rem 1.1rem 1.15rem;
-    border-radius: 18px;
+    padding: 0.9rem 1rem 1rem;
+    border-radius: 16px;
     border: 1px solid rgba(136, 221, 233, 0.1);
-    background: rgba(10, 17, 26, 0.82);
+    background: rgba(9, 14, 22, 0.92);
     overflow-x: auto;
     overflow-y: hidden;
 }
 
 .summary-table-title {
-    margin: 0 0 0.85rem;
-    color: #e7fbff;
-    font-family: "Space Grotesk", sans-serif;
-    font-size: 1rem;
-    letter-spacing: -0.02em;
+    margin: 0 0 0.8rem;
+    color: #effdff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.98rem;
+    letter-spacing: 0;
+}
+
+.summary-table-title strong {
+    font-weight: 700;
 }
 
 .summary-table {
     width: 100%;
     min-width: 760px;
     border-collapse: collapse;
+    table-layout: fixed;
+    border: 2px solid rgba(240, 253, 255, 0.88);
 }
 
 .summary-table thead th {
-    padding: 0.85rem 0.9rem;
+    padding: 0.72rem 0.85rem;
     text-align: left;
-    color: #8fdce7;
-    font-size: 0.73rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    border-bottom: 1px solid rgba(136, 221, 233, 0.14);
-    background: rgba(14, 25, 36, 0.96);
+    color: #f5feff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.98rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    border-right: 2px solid rgba(240, 253, 255, 0.88);
+    border-bottom: 2px solid rgba(240, 253, 255, 0.88);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.summary-table thead th:last-child {
+    border-right: none;
+    text-align: right;
 }
 
 .summary-table tbody td {
-    padding: 0.82rem 0.9rem;
-    color: #d9f6fb;
-    font-size: 0.92rem;
-    border-bottom: 1px solid rgba(136, 221, 233, 0.08);
+    padding: 0.7rem 0.85rem;
+    color: #eefbff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.94rem;
+    line-height: 1.25;
+    border-right: 2px solid rgba(240, 253, 255, 0.88);
+    border-bottom: 2px solid rgba(240, 253, 255, 0.88);
     vertical-align: top;
+    background: transparent;
 }
 
-.summary-table tbody tr:nth-child(even) td {
-    background: rgba(255, 255, 255, 0.015);
+.summary-table tbody td:last-child {
+    border-right: none;
+    text-align: right;
 }
 
 .summary-table tbody tr:last-child td {
     border-bottom: none;
 }
 
-.summary-layer-name {
-    font-weight: 600;
-    color: #f0fdff;
+.summary-layer-name,
+.summary-layer-type,
+.summary-shape,
+.summary-param {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: #eefbff;
+    font-size: 0.94rem;
 }
 
 .summary-layer-type {
-    color: #9dd7df;
+    color: #eefbff;
 }
 
-.summary-shape {
+.summary-layer-cell {
+    white-space: normal;
+}
+
+.summary-totals {
+    margin-top: 0.8rem;
+    color: #eefbff;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    color: #cdeff3;
-    font-size: 0.87rem;
+    font-size: 0.94rem;
+    line-height: 1.35;
 }
 
-.summary-param {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    color: #7ef7ff;
-    font-size: 0.9rem;
-}
-
-.summary-metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.8rem;
-    margin-top: 1rem;
-}
-
-.summary-metric {
-    padding: 0.8rem 0.9rem;
-    border-radius: 14px;
-    border: 1px solid rgba(136, 221, 233, 0.08);
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.summary-metric span {
-    display: block;
-    color: #84c7d0;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-}
-
-.summary-metric strong {
-    display: block;
-    margin-top: 0.35rem;
-    color: #effdff;
-    font-family: "Space Grotesk", sans-serif;
-    font-size: 1rem;
-    letter-spacing: -0.02em;
+.summary-totals div + div {
+    margin-top: 0.08rem;
 }
 
 @keyframes heroDrift {
@@ -1346,8 +1341,10 @@ def render_model_summary_table(summary_text: str) -> None:
     rows_html = "".join(
         f"""
         <tr>
-            <td class="summary-layer-name">{html.escape(layer['capa'])}</td>
-            <td class="summary-layer-type">{html.escape(layer['tipo'])}</td>
+            <td class="summary-layer-cell">
+                <span class="summary-layer-name">{html.escape(layer['capa'])}</span>
+                {"<br/><span class='summary-layer-type'>(" + html.escape(layer['tipo']) + ")</span>" if layer["tipo"] and layer["tipo"] != "--" else ""}
+            </td>
             <td class="summary-shape">{html.escape(layer['salida'])}</td>
             <td class="summary-param">{html.escape(layer['parametros'])}</td>
         </tr>
@@ -1355,41 +1352,35 @@ def render_model_summary_table(summary_text: str) -> None:
         for layer in parsed["layers"]
     )
 
-    total_labels = [
-        ("Total params", "Parametros totales"),
-        ("Trainable params", "Parametros entrenables"),
-        ("Non-trainable params", "Parametros no entrenables"),
-        ("Optimizer params", "Parametros del optimizador"),
+    total_lines = [
+        ("Total params", "Total params"),
+        ("Trainable params", "Trainable params"),
+        ("Non-trainable params", "Non-trainable params"),
+        ("Optimizer params", "Optimizer params"),
     ]
     totals_html = "".join(
-        f"""
-        <div class="summary-metric">
-            <span>{label_es}</span>
-            <strong>{html.escape(parsed['totals'].get(label_en, '--'))}</strong>
-        </div>
-        """
-        for label_en, label_es in total_labels
+        f"<div><strong>{label_es}:</strong> {html.escape(parsed['totals'].get(label_en, '--'))}</div>"
+        for label_en, label_es in total_lines
         if parsed["totals"].get(label_en)
     )
 
     st.markdown(
         f"""
         <div class="summary-table-wrap">
-            <div class="summary-table-title">Modelo: {model_name}</div>
+            <div class="summary-table-title"><strong>Model:</strong> "{model_name}"</div>
             <table class="summary-table">
                 <thead>
                     <tr>
-                        <th>Capa</th>
-                        <th>Tipo</th>
-                        <th>Salida</th>
-                        <th>Parametros</th>
+                        <th style="width: 47%;">Layer (type)</th>
+                        <th style="width: 33%;">Output Shape</th>
+                        <th style="width: 20%;">Param #</th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows_html}
                 </tbody>
             </table>
-            <div class="summary-metrics-grid">
+            <div class="summary-totals">
                 {totals_html}
             </div>
         </div>
