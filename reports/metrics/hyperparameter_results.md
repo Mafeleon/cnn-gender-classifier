@@ -1,0 +1,4 @@
+| name | filters | kernel_size | dense_units | dropout_rate | learning_rate | epochs | best_epoch | best_val_accuracy | best_val_loss | final_train_accuracy | final_train_loss |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| regularized | (8, 16, 32) | 3 | 64 | 0.35 | 0.0005 | 8 | 2 | 0.5777778029441833 | 0.6924317479133606 | 0.5047619342803955 | 0.6924570798873901 |
+| baseline | (8, 16, 32) | 3 | 64 | 0.2 | 0.001 | 6 | 1 | 0.5722222328186035 | 0.6927731037139893 | 0.5023809671401978 | 0.6924973726272583 |

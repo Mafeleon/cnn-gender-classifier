@@ -1,0 +1,163 @@
+{
+  "dataset_summary": {
+    "female": {
+      "count": 2698,
+      "extensions": {
+        ".jpeg": 57,
+        ".jpg": 2547,
+        ".png": 94
+      },
+      "modes": {
+        "RGB": 2571,
+        "RGBA": 52,
+        "L": 70,
+        "P": 5
+      },
+      "bad_files": [],
+      "width_min": 236,
+      "width_max": 8675,
+      "width_mean": 1074.4047442550036,
+      "width_median": 736.0,
+      "height_min": 236,
+      "height_max": 7680,
+      "height_mean": 1298.5237212750185,
+      "height_median": 1000.0
+    },
+    "male": {
+      "count": 2720,
+      "extensions": {
+        ".jpeg": 21,
+        ".jpg": 2643,
+        ".png": 56
+      },
+      "modes": {
+        "RGB": 2608,
+        "RGBA": 27,
+        "L": 85
+      },
+      "bad_files": [],
+      "width_min": 194,
+      "width_max": 5472,
+      "width_mean": 837.6547794117647,
+      "width_median": 683.0,
+      "height_min": 232,
+      "height_max": 5760,
+      "height_mean": 1102.1227941176471,
+      "height_median": 932.0
+    }
+  },
+  "split_counts": {
+    "train": 840,
+    "validation": 180,
+    "test": 180
+  },
+  "modeling_dataset_count": 1200,
+  "modeling_samples_per_class": 600,
+  "image_size": [
+    96,
+    96
+  ],
+  "batch_size": 128,
+  "experiments": [
+    {
+      "name": "regularized",
+      "filters": [
+        8,
+        16,
+        32
+      ],
+      "kernel_size": 3,
+      "dense_units": 64,
+      "dropout_rate": 0.35,
+      "learning_rate": 0.0005,
+      "epochs": 8,
+      "best_epoch": 2,
+      "best_val_accuracy": 0.5777778029441833,
+      "best_val_loss": 0.6924317479133606,
+      "final_train_accuracy": 0.5047619342803955,
+      "final_train_loss": 0.6924570798873901
+    },
+    {
+      "name": "baseline",
+      "filters": [
+        8,
+        16,
+        32
+      ],
+      "kernel_size": 3,
+      "dense_units": 64,
+      "dropout_rate": 0.2,
+      "learning_rate": 0.001,
+      "epochs": 6,
+      "best_epoch": 1,
+      "best_val_accuracy": 0.5722222328186035,
+      "best_val_loss": 0.6927731037139893,
+      "final_train_accuracy": 0.5023809671401978,
+      "final_train_loss": 0.6924973726272583
+    }
+  ],
+  "best_experiment": {
+    "name": "regularized",
+    "filters": [
+      8,
+      16,
+      32
+    ],
+    "kernel_size": 3,
+    "dense_units": 64,
+    "dropout_rate": 0.35,
+    "learning_rate": 0.0005,
+    "epochs": 8,
+    "best_epoch": 2,
+    "best_val_accuracy": 0.5777778029441833,
+    "best_val_loss": 0.6924317479133606,
+    "final_train_accuracy": 0.5047619342803955,
+    "final_train_loss": 0.6924570798873901
+  },
+  "test_metrics": {
+    "accuracy": 0.5944444537162781,
+    "auc": 0.6251851320266724,
+    "loss": 0.6878098845481873
+  },
+  "classification_report": {
+    "female": {
+      "precision": 0.6545454545454545,
+      "recall": 0.4,
+      "f1-score": 0.496551724137931,
+      "support": 90.0
+    },
+    "male": {
+      "precision": 0.568,
+      "recall": 0.7888888888888889,
+      "f1-score": 0.6604651162790698,
+      "support": 90.0
+    },
+    "accuracy": 0.5944444444444444,
+    "macro avg": {
+      "precision": 0.6112727272727272,
+      "recall": 0.5944444444444444,
+      "f1-score": 0.5785084202085005,
+      "support": 180.0
+    },
+    "weighted avg": {
+      "precision": 0.6112727272727273,
+      "recall": 0.5944444444444444,
+      "f1-score": 0.5785084202085004,
+      "support": 180.0
+    }
+  },
+  "xai_sample": {
+    "filepath": "/Users/monicapena/.cache/kagglehub/datasets/ashwingupta3012/male-and-female-faces-dataset/versions/1/Male and Female face dataset/Male Faces/1 (857).jpg",
+    "true_label": "male",
+    "predicted_label": "male",
+    "prob_male": 0.5402083992958069,
+    "confidence": 0.5402083992958069
+  },
+  "artifacts": {
+    "mosaic": "/Users/monicapena/Downloads/Laboratorio_CNNS/reports/figures/dataset_mosaic.png",
+    "class_distribution": "/Users/monicapena/Downloads/Laboratorio_CNNS/reports/figures/class_distribution.png",
+    "hyperparameter_comparison": "/Users/monicapena/Downloads/Laboratorio_CNNS/reports/figures/hyperparameter_comparison.png",
+    "confusion_matrix": "/Users/monicapena/Downloads/Laboratorio_CNNS/reports/figures/confusion_matrix.png",
+    "xai_example": "/Users/monicapena/Downloads/Laboratorio_CNNS/reports/figures/xai_example.png"
+  }
+}

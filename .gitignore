@@ -1,0 +1,10 @@
+.venv/
+.cache/
+__pycache__/
+.DS_Store
+.ipynb_checkpoints/
+data/male
+data/female
+data/raw
+models/experiments/
+reports/tmp/
