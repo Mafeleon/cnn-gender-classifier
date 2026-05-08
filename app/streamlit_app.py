@@ -884,14 +884,16 @@ div[data-testid="stDownloadButton"] > button {
     border-radius: 18px;
     border: 1px solid rgba(136, 221, 233, 0.1);
     background: rgba(10, 17, 26, 0.82);
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .model-summary-block pre {
     margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
+    min-width: max-content;
+    white-space: pre;
     color: #ccebf1;
-    font-size: 0.88rem;
+    font-size: 0.84rem;
     line-height: 1.55;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
