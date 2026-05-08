@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import base64
+import html
 import io
 import json
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,6 @@ from src.inference import prepare_image_from_pil
 from src.settings import CLASS_NAMES, DEFAULT_IMAGE_SIZE, FINAL_MODEL_PATH, RESULTS_JSON_PATH
 from src.xai import make_gradcam_heatmap, make_saliency_map, overlay_heatmap
 
-NOTEBOOK_PATH = ROOT_DIR / "notebooks" / "cnn_gender_lab.ipynb"
 MODEL_SUMMARY_PATH = ROOT_DIR / "reports" / "metrics" / "model_summary.txt"
 FIGURE_PATHS = {
     "class_distribution": ROOT_DIR / "reports" / "figures" / "class_distribution.png",
@@ -594,6 +593,14 @@ a {
     font-size: 0.88rem;
 }
 
+.upload-label {
+    margin: 0.4rem 0 0.7rem;
+    color: #dffaff;
+    font-size: 0.96rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
 .tensor-header,
 .result-header {
     display: flex;
@@ -818,10 +825,75 @@ div[data-testid="stDownloadButton"] > button {
     color: #d8fbff !important;
 }
 
+[data-testid="stFileUploader"] label,
+[data-testid="stFileUploader"] label p,
+[data-testid="stFileUploader"] label span,
+[data-testid="stFileUploader"] small {
+    color: #dffaff !important;
+}
+
+[data-testid="stFileUploader"] section small,
+[data-testid="stFileUploader"] section span {
+    color: #b8edf4 !important;
+}
+
+[data-testid="stExpander"] {
+    border-radius: 24px !important;
+    border: 1px solid rgba(136, 221, 233, 0.12) !important;
+    background: linear-gradient(180deg, rgba(10, 18, 27, 0.96), rgba(6, 11, 18, 0.94)) !important;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+[data-testid="stExpander"] details {
+    background: transparent !important;
+}
+
+[data-testid="stExpander"] summary {
+    background: transparent !important;
+    color: #e7fbff !important;
+}
+
+[data-testid="stExpander"] summary:hover {
+    color: #ffffff !important;
+}
+
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary span,
+[data-testid="stExpander"] label {
+    color: #e7fbff !important;
+}
+
+[data-testid="stExpander"] details[open] summary {
+    border-bottom: 1px solid rgba(136, 221, 233, 0.12);
+}
+
+[data-testid="stExpander"] svg {
+    fill: #7ef7ff !important;
+}
+
 .stAlert {
     border-radius: 20px;
     background: rgba(9, 18, 28, 0.88);
     border: 1px solid rgba(136, 221, 233, 0.16);
+}
+
+.model-summary-block {
+    margin-top: 0.6rem;
+    padding: 1rem 1.1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(136, 221, 233, 0.1);
+    background: rgba(10, 17, 26, 0.82);
+}
+
+.model-summary-block pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #ccebf1;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 @keyframes heroDrift {
@@ -932,35 +1004,20 @@ def extract_total_params(summary_text: str) -> str:
     return match.group(1) if match else "--"
 
 
-def describe_focus_zone(heatmap: np.ndarray) -> tuple[str, str]:
-    y_coords, x_coords = np.indices(heatmap.shape)
-    weights = heatmap.astype(np.float32) + 1e-6
-    weighted_y = float((y_coords * weights).sum() / weights.sum())
-    weighted_x = float((x_coords * weights).sum() / weights.sum())
-    rows, cols = heatmap.shape
-
-    vertical = "superior" if weighted_y < rows / 3 else "central" if weighted_y < 2 * rows / 3 else "inferior"
-    horizontal = "izquierda" if weighted_x < cols / 3 else "centro" if weighted_x < 2 * cols / 3 else "derecha"
-
-    highlighted_ratio = float((heatmap > (heatmap.mean() + heatmap.std())).mean())
-    spread = "compacta" if highlighted_ratio < 0.18 else "distribuida"
-    return f"{vertical}-{horizontal}", spread
-
-
 def saliency_summary(heatmap: np.ndarray) -> str:
-    region, spread = describe_focus_zone(heatmap)
+    _ = heatmap
     return (
-        f"Los pixeles de mayor sensibilidad aparecen de forma {spread} y se concentran en la zona {region} del rostro, "
-        "lo que muestra donde la salida sigmoide cambia con mayor fuerza frente a variaciones locales de textura."
+        "Las zonas con colores mas calientes indican los pixeles ante los que la salida del modelo es mas sensible. "
+        "Si aparecen en amarillo, naranja o rojo, significa que pequenos cambios en esa region modifican mas la prediccion."
     )
 
 
 def gradcam_summary(heatmap: np.ndarray, confidence: float) -> str:
-    region, spread = describe_focus_zone(heatmap)
-    verdict = "refuerza" if confidence >= 0.60 else "solo respalda de forma parcial"
+    _ = heatmap
+    _ = confidence
     return (
-        f"Las activaciones profundas permanecen {spread} sobre la region {region}, lo que {verdict} la "
-        "clasificacion actual al concentrar evidencia semantica y no ruido del fondo."
+        "Las zonas mas calientes muestran donde las capas profundas activan con mayor fuerza para sostener la clase predicha. "
+        "Las regiones frias tienen menor aporte en la decision final del modelo."
     )
 
 
@@ -1003,36 +1060,9 @@ def analyze_image(pil_image: Image.Image) -> dict[str, Any]:
         "confidence": confidence,
         "saliency": saliency,
         "gradcam": gradcam,
-        "saliency_overlay": overlay_heatmap(resized_rgb, saliency),
-        "gradcam_overlay": overlay_heatmap(resized_rgb, gradcam),
+        "saliency_overlay": overlay_heatmap(original_rgb, saliency),
+        "gradcam_overlay": overlay_heatmap(original_rgb, gradcam),
     }
-
-
-def build_export_payload(
-    metadata: dict[str, Any],
-    analysis: dict[str, Any],
-    source_name: str,
-) -> bytes:
-    payload = {
-        "fecha_generacion": datetime.now().isoformat(),
-        "archivo_origen": source_name,
-        "tamano_entrada": list(DEFAULT_IMAGE_SIZE),
-        "prediccion": {
-            "clase_predicha": analysis["predicted_label"],
-            "clase_predicha_mostrada": label_display(analysis["predicted_label"]),
-            "confianza": analysis["confidence"],
-            "probabilidad_femenino": analysis["prob_female"],
-            "probabilidad_masculino": analysis["prob_male"],
-            "clase_positiva_interna_modelo": "male",
-        },
-        "notas_xai": {
-            "saliency_map": saliency_summary(analysis["saliency"]),
-            "grad_cam": gradcam_summary(analysis["gradcam"], analysis["confidence"]),
-        },
-        "referencia_modelo": metadata.get("test_metrics", {}),
-        "mejor_experimento": metadata.get("best_experiment", {}),
-    }
-    return json.dumps(payload, indent=2, ensure_ascii=True).encode("utf-8")
 
 
 def render_section_header(kicker: str, title: str, copy: str, status: str | None = None) -> None:
@@ -1086,8 +1116,7 @@ def render_hero(metadata: dict[str, Any]) -> None:
                 <p class="hero-copy">
                     Una CNN entrenada desde cero se combina con explicabilidad visual para clasificar
                     rostros en las clases <strong>femenino</strong> y <strong>masculino</strong> con evidencia
-                    interpretable. Esta interfaz convierte el laboratorio en una experiencia clara,
-                    elegante y lista para presentacion.
+                    interpretable.
                 </p>
                 <div class="hero-actions">
                     <a class="hero-button primary" href="#analisis">Ir al analisis</a>
@@ -1208,7 +1237,15 @@ def render_models_section(metadata: dict[str, Any], total_params: str, summary_t
             )
 
     with st.expander("Resumen textual de la arquitectura"):
-        st.code(summary_text or "No hay un resumen disponible del modelo.", language="text")
+        summary_body = html.escape(summary_text or "No hay un resumen disponible del modelo.")
+        st.markdown(
+            f"""
+            <div class="model-summary-block">
+                <pre>{summary_body}</pre>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_datasets_section(metadata: dict[str, Any]) -> None:
@@ -1367,7 +1404,7 @@ def render_prediction_card(analysis: dict[str, Any], source_name: str) -> None:
                 </div>
             </div>
             <div class="result-summary">
-                La salida sigmoide del modelo esta calibrada sobre la clase interna <strong>male</strong>.
+                La salida sigmoide del modelo esta calibrada sobre la categoria interna correspondiente a <strong>masculino</strong>.
                 El margen de decision en este caso es de <strong>{margin:.1%}</strong>, por eso la probabilidad
                 complementaria de la otra clase tambien se muestra para la interpretacion.
             </div>
@@ -1420,17 +1457,19 @@ def render_workbench_section(metadata: dict[str, Any]) -> None:
     st.markdown('<div id="analisis" class="section-anchor"></div>', unsafe_allow_html=True)
     workbench_status = "Esperando imagen" if st.session_state.active_image_bytes is None else "Analisis cargado"
     render_section_header(
-        "Laboratorio interactivo",
+        "Flujo de inferencia",
         "Area de analisis",
         "Aqui ocurre el flujo central de la aplicacion: subir una imagen, preprocesarla, clasificarla y visualizar la evidencia de Saliency Map y Grad-CAM sobre la misma entrada analizada.",
         status=workbench_status,
     )
 
     uploader_key = f"main_uploader_{st.session_state.uploader_nonce}"
+    st.markdown('<div class="upload-label">Selecciona o arrastra una imagen facial</div>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader(
-        "Selecciona o arrastra una imagen facial",
+        "Cargador de imagen facial",
         type=["jpg", "jpeg", "png"],
         key=uploader_key,
+        label_visibility="collapsed",
     )
     st.caption("El analisis comienza automaticamente cuando la imagen se carga.")
 
@@ -1466,13 +1505,6 @@ def render_workbench_section(metadata: dict[str, Any]) -> None:
         render_input_tensor_card(analysis["original_rgb"], analysis["resized_rgb"], source_name)
     with top_right:
         render_prediction_card(analysis, source_name)
-        st.download_button(
-            "Descargar reporte JSON",
-            data=build_export_payload(metadata, analysis, source_name),
-            file_name="reporte_analisis_xai.json",
-            mime="application/json",
-            use_container_width=True,
-        )
 
     bottom_left, bottom_right = st.columns(2, gap="large")
     with bottom_left:
@@ -1523,97 +1555,12 @@ def render_archives_section() -> None:
                 eyebrow="Artefacto de interpretabilidad",
             )
 
-    download_cols = st.columns(3, gap="medium")
-    with download_cols[0]:
-        if RESULTS_JSON_PATH.exists():
-            st.download_button(
-                "Descargar resultados JSON",
-                data=RESULTS_JSON_PATH.read_bytes(),
-                file_name="lab_results.json",
-                mime="application/json",
-                use_container_width=True,
-            )
-    with download_cols[1]:
-        if NOTEBOOK_PATH.exists():
-            st.download_button(
-                "Descargar notebook",
-                data=NOTEBOOK_PATH.read_bytes(),
-                file_name="cnn_gender_lab.ipynb",
-                mime="application/json",
-                use_container_width=True,
-            )
-    with download_cols[2]:
-        if MODEL_SUMMARY_PATH.exists():
-            st.download_button(
-                "Descargar resumen del modelo",
-                data=MODEL_SUMMARY_PATH.read_text(encoding="utf-8"),
-                file_name="model_summary.txt",
-                mime="text/plain",
-                use_container_width=True,
-            )
-
-
-def render_protocol_section() -> None:
-    render_section_header(
-        "Documentacion de soporte",
-        "Etica, seguridad, alcance legal y privacidad",
-        "Estas tarjetas le dan contenido real a la capa documental de la interfaz para que el footer apunte a secciones concretas y utiles.",
-    )
-
-    cards = [
-        (
-            "etica",
-            "Protocolo etico",
-            "Este clasificador es una demostracion academica de CNN supervisada con explicabilidad. Sus predicciones no deben interpretarse como identidad, valor o verdad absoluta, y el alcance demografico esta limitado por el conjunto original.",
-        ),
-        (
-            "seguridad",
-            "Documentacion de seguridad",
-            "La interfaz esta pensada para experimentacion controlada. Cada prediccion debe leerse junto con Saliency Map y Grad-CAM para detectar evidencia debil, sesgo de fondo o activaciones inestables antes de sacar conclusiones.",
-        ),
-        (
-            "legal",
-            "Aspectos legales",
-            "El repositorio contiene el modelo entrenado, el notebook y los artefactos generados, pero no el conjunto fuente completo. El uso, redistribucion y atribucion del conjunto siguen sujetos a los terminos del proveedor original.",
-        ),
-        (
-            "privacidad",
-            "Privacidad",
-            "Las imagenes cargadas se procesan dentro de la sesion de la app para inferencia y visualizacion. El despliegue no esta pensado como sistema de almacenamiento, y el repositorio solo conserva artefactos del modelo y reportes generados.",
-        ),
-    ]
-
-    first_row = st.columns(2, gap="large")
-    second_row = st.columns(2, gap="large")
-    for column, (anchor, title, body) in zip(first_row + second_row, cards):
-        with column:
-            st.markdown(f'<div id="{anchor}" class="section-anchor"></div>', unsafe_allow_html=True)
-            st.markdown(
-                f"""
-                <div class="glass-card">
-                    <div class="media-card-header">
-                        <div class="card-eyebrow">Nota documental</div>
-                        <h3 class="media-card-title">{title}</h3>
-                    </div>
-                    <div class="card-note">{body}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-
 def render_footer() -> None:
     st.markdown(
         """
         <section class="footer-shell">
             <div class="footer-brand">PRISMA XAI LAB</div>
-            <div class="footer-links">
-                <a href="#etica">Etica</a>
-                <a href="#seguridad">Seguridad</a>
-                <a href="#legal">Legal</a>
-                <a href="#privacidad">Privacidad</a>
-            </div>
-            <div class="footer-copy">2026 Prisma XAI Lab · despliegue CNN + XAI</div>
+            <div class="footer-copy">2026 Prisma XAI Lab · clasificacion por sexo con CNN y explicabilidad visual</div>
         </section>
         """,
         unsafe_allow_html=True,
@@ -1638,7 +1585,6 @@ def main() -> None:
         st.error(str(error))
 
     render_archives_section()
-    render_protocol_section()
     render_footer()
 
 
