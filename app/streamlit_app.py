@@ -878,9 +878,9 @@ div[data-testid="stDownloadButton"] > button {
     border: 1px solid rgba(136, 221, 233, 0.16);
 }
 
-.model-summary-block {
+.summary-table-wrap {
     margin-top: 0.6rem;
-    padding: 1rem 1.1rem;
+    padding: 1rem 1.1rem 1.15rem;
     border-radius: 18px;
     border: 1px solid rgba(136, 221, 233, 0.1);
     background: rgba(10, 17, 26, 0.82);
@@ -888,14 +888,97 @@ div[data-testid="stDownloadButton"] > button {
     overflow-y: hidden;
 }
 
-.model-summary-block pre {
-    margin: 0;
-    min-width: max-content;
-    white-space: pre;
-    color: #ccebf1;
-    font-size: 0.84rem;
-    line-height: 1.55;
+.summary-table-title {
+    margin: 0 0 0.85rem;
+    color: #e7fbff;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+}
+
+.summary-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.summary-table thead th {
+    padding: 0.85rem 0.9rem;
+    text-align: left;
+    color: #8fdce7;
+    font-size: 0.73rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    border-bottom: 1px solid rgba(136, 221, 233, 0.14);
+    background: rgba(14, 25, 36, 0.96);
+}
+
+.summary-table tbody td {
+    padding: 0.82rem 0.9rem;
+    color: #d9f6fb;
+    font-size: 0.92rem;
+    border-bottom: 1px solid rgba(136, 221, 233, 0.08);
+    vertical-align: top;
+}
+
+.summary-table tbody tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.summary-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.summary-layer-name {
+    font-weight: 600;
+    color: #f0fdff;
+}
+
+.summary-layer-type {
+    color: #9dd7df;
+}
+
+.summary-shape {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: #cdeff3;
+    font-size: 0.87rem;
+}
+
+.summary-param {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: #7ef7ff;
+    font-size: 0.9rem;
+}
+
+.summary-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+
+.summary-metric {
+    padding: 0.8rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(136, 221, 233, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.summary-metric span {
+    display: block;
+    color: #84c7d0;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+}
+
+.summary-metric strong {
+    display: block;
+    margin-top: 0.35rem;
+    color: #effdff;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
 }
 
 @keyframes heroDrift {
@@ -999,6 +1082,68 @@ def label_display(label: str) -> str:
 
 def experiment_display_name(name: str) -> str:
     return {"regularized": "REGULARIZADO", "baseline": "BASE"}.get(name, name.upper())
+
+
+def parse_model_summary(summary_text: str) -> dict[str, Any]:
+    parsed: dict[str, Any] = {
+        "model_name": None,
+        "layers": [],
+        "totals": {},
+    }
+    if not summary_text.strip():
+        return parsed
+
+    current_layer: dict[str, str] | None = None
+    for raw_line in summary_text.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        model_match = re.match(r'^Model:\s*"([^"]+)"$', stripped)
+        if model_match:
+            parsed["model_name"] = model_match.group(1)
+            continue
+
+        total_match = re.match(
+            r"^(Total params|Trainable params|Non-trainable params|Optimizer params):\s*(.+)$",
+            stripped,
+        )
+        if total_match:
+            parsed["totals"][total_match.group(1)] = total_match.group(2).strip()
+            continue
+
+        if "│" not in line and "┃" not in line:
+            continue
+
+        cells = [cell.strip() for cell in re.split(r"[│┃]", line)[1:-1]]
+        if not cells or cells[0].startswith("Layer"):
+            continue
+
+        first = cells[0].strip()
+        second = cells[1].strip() if len(cells) > 1 else ""
+        third = cells[2].strip() if len(cells) > 2 else ""
+
+        if first.startswith("(") and first.endswith(")") and current_layer is not None:
+            current_layer["tipo"] = first[1:-1].strip()
+            continue
+
+        layer_name = first
+        layer_type = ""
+        layer_match = re.match(r"(.+?)\s*\(([^()]*)\)$", first)
+        if layer_match:
+            layer_name = layer_match.group(1).strip()
+            layer_type = layer_match.group(2).strip()
+
+        current_layer = {
+            "capa": layer_name or "--",
+            "tipo": layer_type or "--",
+            "salida": second or "--",
+            "parametros": third or "--",
+        }
+        parsed["layers"].append(current_layer)
+
+    return parsed
 
 
 def extract_total_params(summary_text: str) -> str:
@@ -1191,6 +1336,68 @@ def render_media_card(
     )
 
 
+def render_model_summary_table(summary_text: str) -> None:
+    parsed = parse_model_summary(summary_text)
+    if not parsed["layers"]:
+        st.info("No hay un resumen estructurado disponible del modelo.")
+        return
+
+    model_name = html.escape(parsed["model_name"] or "cnn_gender_classifier")
+    rows_html = "".join(
+        f"""
+        <tr>
+            <td class="summary-layer-name">{html.escape(layer['capa'])}</td>
+            <td class="summary-layer-type">{html.escape(layer['tipo'])}</td>
+            <td class="summary-shape">{html.escape(layer['salida'])}</td>
+            <td class="summary-param">{html.escape(layer['parametros'])}</td>
+        </tr>
+        """
+        for layer in parsed["layers"]
+    )
+
+    total_labels = [
+        ("Total params", "Parametros totales"),
+        ("Trainable params", "Parametros entrenables"),
+        ("Non-trainable params", "Parametros no entrenables"),
+        ("Optimizer params", "Parametros del optimizador"),
+    ]
+    totals_html = "".join(
+        f"""
+        <div class="summary-metric">
+            <span>{label_es}</span>
+            <strong>{html.escape(parsed['totals'].get(label_en, '--'))}</strong>
+        </div>
+        """
+        for label_en, label_es in total_labels
+        if parsed["totals"].get(label_en)
+    )
+
+    st.markdown(
+        f"""
+        <div class="summary-table-wrap">
+            <div class="summary-table-title">Modelo: {model_name}</div>
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Capa</th>
+                        <th>Tipo</th>
+                        <th>Salida</th>
+                        <th>Parametros</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+            <div class="summary-metrics-grid">
+                {totals_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_models_section(metadata: dict[str, Any], total_params: str, summary_text: str) -> None:
     st.markdown('<div id="modelo" class="section-anchor"></div>', unsafe_allow_html=True)
     render_section_header(
@@ -1239,15 +1446,7 @@ def render_models_section(metadata: dict[str, Any], total_params: str, summary_t
             )
 
     with st.expander("Resumen textual de la arquitectura"):
-        summary_body = html.escape(summary_text or "No hay un resumen disponible del modelo.")
-        st.markdown(
-            f"""
-            <div class="model-summary-block">
-                <pre>{summary_body}</pre>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        render_model_summary_table(summary_text)
 
 
 def render_datasets_section(metadata: dict[str, Any]) -> None:
